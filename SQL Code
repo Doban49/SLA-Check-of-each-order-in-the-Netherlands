@@ -55,7 +55,7 @@ SELECT TO_DATE('2026-12-31'), 'New Year’s Eve'
             o."CreatedOn",
             DATEADD(day, 1, DATE(o."CreatedOn")) AS candidate_date,
             o."ClientId"
-        FROM DWH_DEV.IA_INTERN."Order" o
+        FROM Database."Order" o
         WHERE o."ClientId" = :clientid
           AND o."CreatedOn" = :daterange
 
@@ -91,17 +91,17 @@ GROUP BY order_id, "CreatedOn"
 SLA_Check_each_Order AS (
 Select
 ord."Id"as "Order Id",
-ord."ExternalOrderNumber",
+ord."External_Order_Number",
 sh."CLIENTNAME", 
 ord."CreatedOn",
 sh."SHIPMENTID",
 //shista."Id",
-sh."SHIPPINGMETHODNAME",
-shista."ReadyToShipOn",
+sh."Name_Shipping_Method",
+shista."ReadyToShipDate",
 shista."FirstDeliveryOn",
 //ord."IsBackOrder",
 //DAYOFWEEK(ord."CreatedOn"),
-//DAYOFWEEK(shista."ReadyToShipOn"),
+//DAYOFWEEK(shista."ReadyToShipDate"),
 //:datebucket(ord."CreatedOn") as "Time Group (Year, Month etc.)",
 
 CASE DAYOFWEEK(ord."CreatedOn")
@@ -140,44 +140,44 @@ CASE
 -------------------------------------------
 
 // Ready to be shipped same day
-    WHEN  DATE(ord."CreatedOn") = DATE(shista."ReadyToShipOn")
+    WHEN  DATE(ord."CreatedOn") = DATE(shista."ReadyToShipDate")
                 AND DAYOFWEEK(ord."CreatedOn") IN (1, 2, 3, 4, 5) 
     THEN 1
     
 // Ready to be shipped in the first three hours of the next day 
 
-    WHEN sh."SHIPPINGMETHODNAME" = 'NETHERLANDS DHL' 
-        AND shista."ReadyToShipOn" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
-        AND shista."ReadyToShipOn" < DATEADD(hour, 3, DATEADD(day, 1, DATE(ord."CreatedOn")))
+    WHEN sh."Name_Shipping_Method" = 'NETHERLANDS DHL' 
+        AND shista."ReadyToShipDate" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
+        AND shista."ReadyToShipDate" < DATEADD(hour, 3, DATEADD(day, 1, DATE(ord."CreatedOn")))
         AND DAYOFWEEK(ord."CreatedOn") IN (1, 2, 3, 4, 5)
     THEN 1
     
 // Ready to be shipped next day after 23:59 on working days    
-    WHEN sh."SHIPPINGMETHODNAME" = 'NETHERLANDS DHL'
+    WHEN sh."Name_Shipping_Method" = 'NETHERLANDS DHL'
         AND (DAYOFWEEK(ord."CreatedOn") IN (1, 2 , 3, 4) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')
-        AND DATE(shista."ReadyToShipOn") = DATE(ord."CreatedOn") + 1 
+        AND DATE(shista."ReadyToShipDate") = DATE(ord."CreatedOn") + 1 
     THEN 1
     
 
 //Orders received Friday after deadline and on the weekend and are processed during the week
-    WHEN sh."SHIPPINGMETHODNAME" = 'NETHERLANDS DHL' 
+    WHEN sh."Name_Shipping_Method" = 'NETHERLANDS DHL' 
         AND ((DAYOFWEEK(ord."CreatedOn") = 5 AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')  
         OR (DAYOFWEEK(ord."CreatedOn") = 6)                                          
         OR (DAYOFWEEK(ord."CreatedOn") = 0 )) 
-        And (DAYOFWEEK(shista."ReadyToShipOn") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipOn") = 1 AND TO_TIME(shista."ReadyToShipOn") <= TIME 'XX:XX:XX')  OR (DATE(shista."ReadyToShipOn") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
+        And (DAYOFWEEK(shista."ReadyToShipDate") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipDate") = 1 AND TO_TIME(shista."ReadyToShipDate") <= TIME 'XX:XX:XX')  OR (DATE(shista."ReadyToShipDate") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
     THEN 1
 
 
     
 
 // Orders received on public holidays 
-    WHEN  DATE(ord."CreatedOn") IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND DATE(shista."ReadyToShipOn") BETWEEN DATE(ord."CreatedOn") AND nwdf.next_working_day
+    WHEN  DATE(ord."CreatedOn") IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND DATE(shista."ReadyToShipDate") BETWEEN DATE(ord."CreatedOn") AND nwdf.next_working_day
     THEN 1
     
 // Orders received day before public holiday after deadline
 
-    WHEN sh."SHIPPINGMETHODNAME" = 'NETHERLANDS DHL' 
-    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipOn") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
+    WHEN sh."Name_Shipping_Method" = 'NETHERLANDS DHL' 
+    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipDate") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
     THEN TRUE
 
 
@@ -189,25 +189,25 @@ CASE
 
 // Ready to be shipped in the first three hours of the next day 
 
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%BPOST%'
-        AND shista."ReadyToShipOn" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
-        AND shista."ReadyToShipOn" < DATEADD(hour, 3, DATEADD(day, 1, DATE(ord."CreatedOn")))
+    WHEN sh."Name_Shipping_Method" ILIKE '%BPOST%'
+        AND shista."ReadyToShipDate" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
+        AND shista."ReadyToShipDate" < DATEADD(hour, 3, DATEADD(day, 1, DATE(ord."CreatedOn")))
         AND DAYOFWEEK(ord."CreatedOn") IN (1, 2, 3, 4, 5)
     THEN 1
     
 // Ready to be shipped next day after 23:59 on working days    
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%BPOST%'xx
+    WHEN sh."Name_Shipping_Method" ILIKE '%BPOST%'xx
         AND (DAYOFWEEK(ord."CreatedOn") IN (1, 2 , 3, 4) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')
-        AND DATE(shista."ReadyToShipOn") = DATE(ord."CreatedOn") + 1 
+        AND DATE(shista."ReadyToShipDate") = DATE(ord."CreatedOn") + 1 
     THEN 1
     
 
 //Orders received Friday after deadline and on the weekend 
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%BPOST%'
+    WHEN sh."Name_Shipping_Method" ILIKE '%BPOST%'
         AND ((DAYOFWEEK(ord."CreatedOn") = 5 AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')  
         OR (DAYOFWEEK(ord."CreatedOn") = 6)                                          
         OR (DAYOFWEEK(ord."CreatedOn") = 0 )) 
-        And (DAYOFWEEK(shista."ReadyToShipOn") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipOn") = 1 AND TO_TIME(shista."ReadyToShipOn") <= TIME 'XX:XX:XX')  OR (DATE(shista."ReadyToShipOn") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
+        And (DAYOFWEEK(shista."ReadyToShipDate") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipDate") = 1 AND TO_TIME(shista."ReadyToShipDate") <= TIME 'XX:XX:XX')  OR (DATE(shista."ReadyToShipDate") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
     THEN 1
 
 
@@ -215,8 +215,8 @@ CASE
     
 // Orders received day before public holiday after deadline
 
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%BPOST%'
-    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipOn") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
+    WHEN sh."Name_Shipping_Method" ILIKE '%BPOST%'
+    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipdate") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
     THEN TRUE
 
 ---------------------------------------------
@@ -228,33 +228,33 @@ CASE
 
 // Ready to be shipped in the first ten hours of the next day 
 
-    WHEN (sh."SHIPPINGMETHODNAME" = 'FRANCE COLIS PRIVE' OR sh."SHIPPINGMETHODNAME" ILIKE '%LA POSTE%')
-        AND shista."ReadyToShipOn" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
-        AND shista."ReadyToShipOn" < DATEADD(hour, 10, DATEADD(day, 1, DATE(ord."CreatedOn")))
+    WHEN (sh."Name_Shipping_Method" = 'FRANCE COLIS PRIVE' OR sh."Name_Shipping_Method" ILIKE '%LA POSTE%')
+        AND shista."ReadyToShipDate" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
+        AND shista."ReadyToShipDate" < DATEADD(hour, 10, DATEADD(day, 1, DATE(ord."CreatedOn")))
         AND DAYOFWEEK(ord."CreatedOn") IN (1, 2, 3, 4)
     THEN 1
     
 // Ready to be shipped next day after XX:XX on working days    
-    WHEN (sh."SHIPPINGMETHODNAME" = 'FRANCE COLIS PRIVE' OR sh."SHIPPINGMETHODNAME" ILIKE '%LA POSTE%')
+    WHEN (sh."Name_Shipping_Method" = 'FRANCE COLIS PRIVE' OR sh."Name_Shipping_Method" ILIKE '%LA POSTE%')
         AND (DAYOFWEEK(ord."CreatedOn") IN (1, 2 , 3, 4) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')
-        AND DATE(shista."ReadyToShipOn") = DATE(ord."CreatedOn") + 1 
+        AND DATE(shista."ReadyToShipDate") = DATE(ord."CreatedOn") + 1 
     THEN 1
     
 
 //Orders received Friday after deadline and on the weekend 
-    WHEN (sh."SHIPPINGMETHODNAME" = 'FRANCE COLIS PRIVE' OR sh."SHIPPINGMETHODNAME" ILIKE '%LA POSTE%')
+    WHEN (sh."Name_Shipping_Method" = 'FRANCE COLIS PRIVE' OR sh."Name_Shipping_Method" ILIKE '%LA POSTE%')
         AND ((DAYOFWEEK(ord."CreatedOn") = 5 AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')  
         OR (DAYOFWEEK(ord."CreatedOn") = 6)                                          
         OR (DAYOFWEEK(ord."CreatedOn") = 0 )) 
-        And (DAYOFWEEK(shista."ReadyToShipOn") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipOn") = 1 AND TO_TIME(shista."ReadyToShipOn") <= TIME 'XX:XX:XX')  OR (DATE(shista."ReadyToShipOn") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
+        And (DAYOFWEEK(shista."ReadyToShipDate") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipDate") = 1 AND TO_TIME(shista."ReadyToShipDate") <= TIME 'XX:XX:XX')  OR (DATE(shista."") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
     THEN 1
 
 // Orders received on public holidays --> already included under DHL 
     
 // Orders received day before public holiday after deadline
 
-    WHEN (sh."SHIPPINGMETHODNAME" = 'FRANCE COLIS PRIVE' OR sh."SHIPPINGMETHODNAME" ILIKE '%LA POSTE%')
-    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipOn") BETWEEN  DATE(ord."CreatedOn") AND nwdf.next_working_day 
+    WHEN (sh."Name_Shipping_Method" = 'FRANCE COLIS PRIVE' OR sh."Name_Shipping_Method" ILIKE '%LA POSTE%')
+    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."") BETWEEN  DATE(ord."CreatedOn") AND nwdf.next_working_day 
     THEN TRUE
 
 -----------------------------------------------
@@ -266,25 +266,25 @@ CASE
 
 // Ready to be shipped in the first three hours of the next day 
 
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%GLS%'
-        AND shista."ReadyToShipOn" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
-        AND shista."ReadyToShipOn" < DATEADD(hour, 3, DATEADD(day, 1, DATE(ord."CreatedOn")))
+    WHEN sh."Name_Shipping_Method" ILIKE '%GLS%'
+        AND shista."ReadyToShipDate" >= DATEADD(day, 1, DATE(ord."CreatedOn"))
+        AND shista."ReadyToShipDate" < DATEADD(hour, 3, DATEADD(day, 1, DATE(ord."CreatedOn")))
         AND DAYOFWEEK(ord."CreatedOn") IN (1, 2, 3, 4, 5)
     THEN 1
     
 // Ready to be shipped next day after XX:XX on working days    
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%GLS%'
+    WHEN sh."Name_Shipping_Method" ILIKE '%GLS%'
         AND (DAYOFWEEK(ord."CreatedOn") IN (1, 2 , 3, 4) AND TO_TIME(ord."CreatedOn") > 'XX:XX:X')
-        AND DATE(shista."ReadyToShipOn") = DATE(ord."CreatedOn") + 1 
+        AND DATE(shista."ReadyToShipDate") = DATE(ord."CreatedOn") + 1 
     THEN 1
     
 
 //Orders received Friday after deadline and on the weekend 
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%GLS%'
+    WHEN sh."Name_Shipping_Method" ILIKE '%GLS%'
         AND ((DAYOFWEEK(ord."CreatedOn") = 5 AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')  
         OR (DAYOFWEEK(ord."CreatedOn") = 6)                                          
         OR (DAYOFWEEK(ord."CreatedOn") = 0 )) 
-        And (DAYOFWEEK(shista."ReadyToShipOn") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipOn") = 1 AND TO_TIME(shista."ReadyToShipOn") <= TIME 'XX:XX:XX')  OR (DATE(shista."ReadyToShipOn") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
+        And (DAYOFWEEK(shista."ReadyToShipDate") IN (6,0) OR   (DAYOFWEEK(shista."ReadyToShipDate") = 1 AND TO_TIME(shista."ReadyToShipDate") <= TIME 'XX:XX:XX')  OR (DATE(shista."ReadyToShipDate") = nwdf.next_working_day AND DAYOFWEEK(nwdf.next_working_day) !=1))
     THEN 1
 
     
@@ -292,8 +292,8 @@ CASE
     
 // Orders received day before public holiday after deadline
 
-    WHEN "SHIPPINGMETHODNAME" ILIKE '%GLS%'
-    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipOn") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
+    WHEN "Name_Shipping_Method" ILIKE '%GLS%'
+    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipDate") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
     THEN TRUE
 
 
@@ -307,60 +307,60 @@ CASE
 
 
 // Ready to be shipped next day after XX:XX on working days    
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%UPS%'
+    WHEN sh."Name_Shipping_Method" ILIKE '%UPS%'
         AND (DAYOFWEEK(ord."CreatedOn") IN (1, 2 , 3, 4) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')
-        AND DATE(shista."ReadyToShipOn") = DATE(ord."CreatedOn") + 1 
+        AND DATE(shista."ReadyToShipDate") = DATE(ord."CreatedOn") + 1 
     THEN 1
     
 
 //Orders received Friday after deadline and on the weekend 
-    WHEN sh."SHIPPINGMETHODNAME"  ILIKE '%UPS%'
+    WHEN sh."Name_Shipping_Method"  ILIKE '%UPS%'
         AND ((DAYOFWEEK(ord."CreatedOn") = 5 AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')  
         OR (DAYOFWEEK(ord."CreatedOn") = 6)                                          
         OR (DAYOFWEEK(ord."CreatedOn") = 0 )) 
-        And (DAYOFWEEK(shista."ReadyToShipOn") IN (6,0,1) OR DATE(shista."ReadyToShipOn") = nwdf.next_working_day)
+        And (DAYOFWEEK(shista."ReadyToShipDate") IN (6,0,1) OR DATE(shista."ReadyToShipDate") = nwdf.next_working_day)
     THEN 1
 
 // Orders received on public holidays --> already included under DHL 
     
 // Orders received day before public holiday after deadline
 
-    WHEN "SHIPPINGMETHODNAME" ILIKE '%UPS%'
-    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipOn") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
+    WHEN "Name_Shipping_Method" ILIKE '%UPS%'
+    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipDate") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
     THEN TRUE
 
     
     
 ------------------------------------
-// DHL Germany 
+// DPD Germany 
 ------------------------------------
 
 
 // Same Day shipment created and ready to sent time stamp condition --> already in the DHL abstract. 
 
-// Ready to be shipped in the first three hours of the next day --> not needed for Germany DHL because of early cutoff 
+// Ready to be shipped in the first three hours of the next day --> not needed for Germany DPD because of early cutoff 
     
 // Ready to be shipped next day after XX:XX on working days    
-    WHEN sh."SHIPPINGMETHODNAME" = 'GERMANY DHL'
+    WHEN sh."Name_Shipping_Method" = 'GERMANY DPD'
         AND (DAYOFWEEK(ord."CreatedOn") IN (1, 2 , 3, 4) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')
-        AND DATE(shista."ReadyToShipOn") = DATE(ord."CreatedOn") + 1 
+        AND DATE(shista."ReadyToShipDate") = DATE(ord."CreatedOn") + 1 
     THEN 1
     
 
 //Orders received Friday after deadline and on the weekend 
-    WHEN sh."SHIPPINGMETHODNAME" = 'GERMANY DHL'
+    WHEN sh."Name_Shipping_Method" = 'GERMANY DPD'
         AND ((DAYOFWEEK(ord."CreatedOn") = 5 AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')  
         OR (DAYOFWEEK(ord."CreatedOn") = 6)                                          
         OR (DAYOFWEEK(ord."CreatedOn") = 0 )) 
-        And (DAYOFWEEK(shista."ReadyToShipOn") IN (6,0,1) OR DATE(shista."ReadyToShipOn") = nwdf.next_working_day)
+        And (DAYOFWEEK(shista."ReadyToShipDate") IN (6,0,1) OR DATE(shista."ReadyToShipDate") = nwdf.next_working_day)
     THEN 1
 
 // Orders received on public holidays --> already included under DHL 
     
 // Orders received day before public holiday after deadline
 
-    WHEN "SHIPPINGMETHODNAME" = 'GERMANY DHL'
-    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipOn") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
+    WHEN "Name_Shipping_Method" = 'GERMANY DPD'
+    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipDate") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
     THEN TRUE
 
 
@@ -373,26 +373,26 @@ CASE
 --------------------------------------
 
 // Ready to be shipped next day after XX:XX on working days    
-    WHEN sh."SHIPPINGMETHODNAME" ILIKE '%CORREOS+%'
+    WHEN sh."Name_Shipping_Method" ILIKE '%CORREOS+%'
         AND (DAYOFWEEK(ord."CreatedOn") IN (1, 2 , 3, 4) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')
-        AND DATE(shista."ReadyToShipOn") = DATE(ord."CreatedOn") + 1 
+        AND DATE(shista."ReadyToShipDate") = DATE(ord."CreatedOn") + 1 
     THEN 1
     
 
 //Orders received Friday after deadline and on the weekend 
-    WHEN sh."SHIPPINGMETHODNAME"  ILIKE '%CORREOS+%'
+    WHEN sh."Name_Shipping_Method"  ILIKE '%CORREOS+%'
         AND ((DAYOFWEEK(ord."CreatedOn") = 5 AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX')  
         OR (DAYOFWEEK(ord."CreatedOn") = 6)                                          
         OR (DAYOFWEEK(ord."CreatedOn") = 0 )) 
-        And (DAYOFWEEK(shista."ReadyToShipOn") IN (6,0,1) OR DATE(shista."ReadyToShipOn") = nwdf.next_working_day)
+        And (DAYOFWEEK(shista."ReadyToShipDate") IN (6,0,1) OR DATE(shista."ReadyToShipDate") = nwdf.next_working_day)
     THEN 1
 
 // Orders received on public holidays --> already included under DHL 
     
 // Orders received day before public holiday after deadline
 
-    WHEN "SHIPPINGMETHODNAME" ILIKE '%CORREOS+%'
-    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipOn") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
+    WHEN "Name_Shipping_Method" ILIKE '%CORREOS+%'
+    AND DATEADD(day, 1, DATE(ord."CreatedOn")) IN (SELECT holiday_date FROM PUBLIC_HOLIDAYS_NRW) AND TO_TIME(ord."CreatedOn") > 'XX:XX:XX' AND DATE(shista."ReadyToShipDate") BETWEEN         DATE(ord."CreatedOn") AND nwdf.next_working_day 
     THEN TRUE
 
 
@@ -422,15 +422,15 @@ END AS "First Shipment",
 
 
 from
-        DWH_DEV.IA_INTERN."Order" ord
-        LEFT JOIN DWH_DEV.IA_INTERN."Shipment" sh on sh.orderid = ord."Id"
-        LEFT JOIN DWH_DEV.IA_INTERN."ShipmentStatus" shista on shista."Id" = sh."SHIPMENTID"
+        Database."Order" ord
+        LEFT JOIN Database."Shipment" sh on sh.orderid = ord."Id"
+        LEFT JOIN Database."ShipmentStatus" shista on shista."Id" = sh."SHIPMENTID"
         LEFT JOIN Next_Working_Day_Final nwdf on nwdf."CreatedOn" = ord."CreatedOn"
-        LEFT JOIN DWH_DEV.BA."BA_ShipmentStatusUpdate" shistup on shistup."ShipmentId" = sh."SHIPMENTID" AND shistup."NewStatus" = 'LABEL_ERROR'
+        LEFT JOIN Database."BA_ShipmentStatusUpdate" shistup on shistup."ShipmentId" = sh."SHIPMENTID" AND shistup."NewStatus" = 'LABEL_ERROR'
 
         //LEFT JOIN NextWorkingDayAfterHoliday nwd ON nwd.order_id = ord."Id"
         //LEFT JOIN NextWorkingDayAfterLatePreHoliday nwd2 ON nwd2.order_id = ord."Id"
-        Left Join DWH_DEV.IA_INTERN."Client" cli on cli."Id" = ord."ClientId"
+        Left Join Database."Client" cli on cli."Id" = ord."ClientId"
 where   ord."ClientId" = :clientid
         and ord."CreatedOn" = :daterange
         and (ord."IsBackOrder" = FALSE OR ord."IsBackOrder" IS NULL)
@@ -438,10 +438,10 @@ where   ord."ClientId" = :clientid
         // and shista."Id" IS NOT NULL
         and ord."Id" IS NOT NULL
         and sh."SHIPMENTID" IS NOT NULL
-        and shista."ReadyToShipOn" IS NOT NULL
+        and shista."ReadyToShipDate" IS NOT NULL
         and ord."IsValid" = TRUE
         and  (ord."OnHold" IS NULL OR ord."OnHold" =0)
-        //and sh."SHIPPINGMETHODNAME" ILIKE '%LA POSTE%'
+        //and sh."Name_Shipping_Method" ILIKE '%LA POSTE%'
         //and ord."Id" IN (XXXXXXXX,XXXXXXXX,XXXXXXXX)
         //and loc."TypeClass" NOT IN ('RETURN','DAMAGED')
         //and "sent on time (order reception)" = 1
@@ -511,13 +511,13 @@ orders_carrier AS (
     SELECT
         sh.ORDERID,
         sh.ORDERCREATEDON,
-        sh.SHIPPINGMETHODNAME,
+        sh.Name_Shipping_Method,
         sh.SHIPMENTID,
         REGEXP_SUBSTR(
-            sh.SHIPPINGMETHODNAME,
+            sh.Name_Shipping_Method,
             '(BPOST|GLS|UPS|COLIS PRIVE|LA POSTE|CORREOS|NETHERLANDS DHL|GERMANY DHL)'
         ) AS carrier
-    FROM DWH_DEV.IA_INTERN."Shipment" sh
+    FROM Database."Shipment" sh
     WHERE sh.ORDERCREATEDON::DATE = :daterange
       AND sh.CLIENTID = :clientid
 ),
@@ -658,7 +658,7 @@ all_final_cutoffs AS (
 SELECT
     t.ORDERID,
     t.ORDERCREATEDON,
-    t.SHIPPINGMETHODNAME,
+    t.Name_Shipping_Method,
     t.SHIPMENTID,
     t.carrier,
     t.today_cutoff,
@@ -681,7 +681,7 @@ LEFT JOIN next_cutoff_ranked n
 SELECT
     ORDERID,
     ORDERCREATEDON,
-    SHIPPINGMETHODNAME,
+    Name_Shipping_Method,
     SHIPMENTID,
     carrier,
     today_cutoff,
@@ -730,7 +730,7 @@ Select
     ORDERID,
     SHIPMENTID,
     ORDERCREATEDON,
-    SHIPPINGMETHODNAME,
+    Name_Shipping_Method,
     carrier,
     today_cutoff,
     last_cutoff,
@@ -741,16 +741,16 @@ Select
     orders_between_cutoffs,
 
     CASE
-    WHEN ORDERCREATEDON BETWEEN DATEADD(hour, -4, next_cutoff) AND next_cutoff AND (orders_last_4h/NULLIF(orders_between_cutoffs, 0)) > 0.15
+    WHEN ORDERCREATEDON BETWEEN DATEADD(hour, -4, next_cutoff) AND next_cutoff AND (orders_last_4h/NULLIF(orders_between_cutoffs, 0)) > 0.20
     THEN FALSE
     ELSE TRUE
-    END AS "Below 85% Order Volume Rule (4h)",
+    END AS "Below 20% Order Volume Rule (4h)",
 
     CASE
-    WHEN ORDERCREATEDON BETWEEN DATEADD(hour, -2, next_cutoff) AND next_cutoff AND (orders_last_2h/NULLIF(orders_between_cutoffs, 0)) > 0.05
+    WHEN ORDERCREATEDON BETWEEN DATEADD(hour, -2, next_cutoff) AND next_cutoff AND (orders_last_2h/NULLIF(orders_between_cutoffs, 0)) > 0.10
     THEN FALSE
     ELSE TRUE
-    END AS "Below 95% Order Volume Rule (2h)",
+    END AS "Below 10% Order Volume Rule (2h)",
 
 
 From Count_Orders_bw_cutoffs
@@ -765,12 +765,12 @@ Order by  ORDERCREATEDON
 
 Select
 "Order Id",
-"ExternalOrderNumber",
+"External_Order_Number",
 "CLIENTNAME", 
 "CreatedOn",
 slach."SHIPMENTID",
-slach."SHIPPINGMETHODNAME",
-"ReadyToShipOn",
+slach."Name_Shipping_Method",
+"ReadyToShipDate",
 "FirstDeliveryOn",
 "weekday",
 "month", 
