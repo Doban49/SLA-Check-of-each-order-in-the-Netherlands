@@ -54,9 +54,9 @@ SELECT TO_DATE('2026-12-31'), 'New Year’s Eve'
             o."Id" AS order_id,
             o."CreatedOn",
             DATEADD(day, 1, DATE(o."CreatedOn")) AS candidate_date,
-            o."ClientId"
+            o."Client_Id_Nr"
         FROM Database."Order" o
-        WHERE o."ClientId" = :clientid
+        WHERE o."Client_Id_Nr" = :clientid
           AND o."CreatedOn" = :daterange
 
         UNION ALL
@@ -66,7 +66,7 @@ SELECT TO_DATE('2026-12-31'), 'New Year’s Eve'
             nwd.order_id,
             nwd."CreatedOn",
             DATEADD(day, 1, nwd.candidate_date),
-            nwd."ClientId"
+            nwd."Client_Id_Nr"
         FROM NEXT_WORKING_DAY nwd
         LEFT JOIN PUBLIC_HOLIDAYS_NRW ph ON nwd.candidate_date = ph.holiday_date
         WHERE 
@@ -94,12 +94,12 @@ ord."Id"as "Order Id",
 ord."External_Order_Number",
 sh."CLIENTNAME", 
 ord."CreatedOn",
-sh."SHIPMENTID",
+sh."SHIPMENT_Id_Nr",
 //shista."Id",
 sh."Name_Shipping_Method",
 shista."ReadyToShipDate",
 shista."FirstDeliveryOn",
-//ord."IsBackOrder",
+//ord."BackOrder",
 //DAYOFWEEK(ord."CreatedOn"),
 //DAYOFWEEK(shista."ReadyToShipDate"),
 //:datebucket(ord."CreatedOn") as "Time Group (Year, Month etc.)",
@@ -424,26 +424,26 @@ END AS "First Shipment",
 from
         Database."Order" ord
         LEFT JOIN Database."Shipment" sh on sh.orderid = ord."Id"
-        LEFT JOIN Database."ShipmentStatus" shista on shista."Id" = sh."SHIPMENTID"
+        LEFT JOIN Database."ShipmentStatus" shista on shista."Id" = sh."SHIPMENT_Id_Nr"
         LEFT JOIN Next_Working_Day_Final nwdf on nwdf."CreatedOn" = ord."CreatedOn"
-        LEFT JOIN Database."BA_ShipmentStatusUpdate" shistup on shistup."ShipmentId" = sh."SHIPMENTID" AND shistup."NewStatus" = 'LABEL_ERROR'
+        LEFT JOIN Database."BA_ShipmentStatusUpdate" shistup on shistup."SHIPMENT_Id_Nr" = sh."SHIPMENT_Id_Nr" AND shistup."NewStatus" = 'LABEL_ERROR'
 
         //LEFT JOIN NextWorkingDayAfterHoliday nwd ON nwd.order_id = ord."Id"
         //LEFT JOIN NextWorkingDayAfterLatePreHoliday nwd2 ON nwd2.order_id = ord."Id"
-        Left Join Database."Client" cli on cli."Id" = ord."ClientId"
-where   ord."ClientId" = :clientid
+        Left Join Database."Client" cli on cli."Id" = ord."Client_Id_Nr"
+where   ord."Client_Id_Nr" = :clientid
         and ord."CreatedOn" = :daterange
-        and (ord."IsBackOrder" = FALSE OR ord."IsBackOrder" IS NULL)
-        and ord."OrderTypeName" NOT IN ('B2B')
+        and (ord."BackOrder" = FALSE OR ord."BackOrder" IS NULL)
+        and ord."Name_Order_Type" NOT IN ('B2B')
         // and shista."Id" IS NOT NULL
         and ord."Id" IS NOT NULL
-        and sh."SHIPMENTID" IS NOT NULL
+        and sh."SHIPMENT_Id_Nr" IS NOT NULL
         and shista."ReadyToShipDate" IS NOT NULL
-        and ord."IsValid" = TRUE
+        and ord."Valid" = TRUE
         and  (ord."OnHold" IS NULL OR ord."OnHold" =0)
         //and sh."Name_Shipping_Method" ILIKE '%LA POSTE%'
         //and ord."Id" IN (XXXXXXXX,XXXXXXXX,XXXXXXXX)
-        //and loc."TypeClass" NOT IN ('RETURN','DAMAGED')
+        //and loc."Type" NOT IN ('RETURN','DAMAGED')
         //and "sent on time (order reception)" = 1
 
 ), 
@@ -512,14 +512,14 @@ orders_carrier AS (
         sh.ORDERID,
         sh.ORDERCREATEDON,
         sh.Name_Shipping_Method,
-        sh.SHIPMENTID,
+        sh.SHIPMENT_Id_Nr,
         REGEXP_SUBSTR(
             sh.Name_Shipping_Method,
             '(BPOST|GLS|UPS|COLIS PRIVE|LA POSTE|CORREOS|NETHERLANDS DHL|GERMANY DHL)'
         ) AS carrier
     FROM Database."Shipment" sh
     WHERE sh.ORDERCREATEDON::DATE = :daterange
-      AND sh.CLIENTID = :clientid
+      AND sh.Client_Id_Nr = :clientid
 ),
 
 orders_with_day AS (
@@ -576,7 +576,7 @@ day_offsets_past AS (
 future_cutoffs AS (
     SELECT
         t.ORDERID,
-        t.SHIPMENTID,
+        t.SHIPMENT_Id_Nr,
         DATEADD(day, d.day_offset, t.ORDERCREATEDON::DATE) AS cutoff_date,
         wc.cutoff_time,
         TO_TIMESTAMP_NTZ(
@@ -607,7 +607,7 @@ future_cutoffs AS (
 past_cutoffs AS (
     SELECT
         t.ORDERID,
-        t.SHIPMENTID,
+        t.SHIPMENT_Id_Nr,
         DATEADD(day, -d.day_offset, t.ORDERCREATEDON::DATE) AS cutoff_date,
         wc.cutoff_time,
         TO_TIMESTAMP_NTZ(
@@ -659,7 +659,7 @@ SELECT
     t.ORDERID,
     t.ORDERCREATEDON,
     t.Name_Shipping_Method,
-    t.SHIPMENTID,
+    t.SHIPMENT_Id_Nr,
     t.carrier,
     t.today_cutoff,
     -- last cutoff before order
@@ -682,7 +682,7 @@ SELECT
     ORDERID,
     ORDERCREATEDON,
     Name_Shipping_Method,
-    SHIPMENTID,
+    SHIPMENT_Id_Nr,
     carrier,
     today_cutoff,
     last_cutoff,
@@ -728,7 +728,7 @@ Checking_85_and_95_Amount AS (
 
 Select 
     ORDERID,
-    SHIPMENTID,
+    SHIPMENT_Id_Nr,
     ORDERCREATEDON,
     Name_Shipping_Method,
     carrier,
@@ -768,7 +768,7 @@ Select
 "External_Order_Number",
 "CLIENTNAME", 
 "CreatedOn",
-slach."SHIPMENTID",
+slach."SHIPMENT_Id_Nr",
 slach."Name_Shipping_Method",
 "ReadyToShipDate",
 "FirstDeliveryOn",
@@ -784,5 +784,5 @@ orders_last_4h,
 orders_between_cutoffs,
 
 From SLA_Check_each_Order slach
-Left Join Checking_85_and_95_Amount cha89 on slach."Order Id" = cha89.ORDERID and slach."SHIPMENTID" = cha89.SHIPMENTID,
+Left Join Checking_85_and_95_Amount cha89 on slach."Order Id" = cha89.ORDERID and slach."SHIPMENT_Id_Nr" = cha89.SHIPMENT_Id_Nr,
 Order by "CLIENTNAME","CreatedOn";
